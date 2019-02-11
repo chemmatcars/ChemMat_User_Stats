@@ -52,7 +52,7 @@
          </attribute>
          <layout class="QHBoxLayout" name="horizontalLayout_3">
           <item>
-           <widget class="QTableWidget" name="rawDataTableWidget"/>
+           <widget class="TableWidget" name="rawDataTableWidget"/>
           </item>
          </layout>
         </widget>
@@ -69,7 +69,7 @@
             <widget class="QWidget" name="layoutWidget">
              <layout class="QVBoxLayout" name="verticalLayout_2">
               <item>
-               <widget class="QTableWidget" name="filteredDataTableWidget"/>
+               <widget class="TableWidget" name="filteredDataTableWidget"/>
               </item>
               <item>
                <widget class="QPushButton" name="exportDataPushButton">
@@ -213,20 +213,13 @@
                  </widget>
                 </item>
                 <item>
-                 <spacer name="horizontalSpacer_3">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
                  <widget class="QComboBox" name="calComboBox">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
                   <property name="minimumSize">
                    <size>
                     <width>200</width>
@@ -289,6 +282,13 @@
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>TableWidget</class>
+   <extends>QTableWidget</extends>
+   <header location="global">pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
