@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QIntValidator, QDoubleValidator
 from PyQt5.QtTest import QTest
+import pyqtgraph
 import sys
 
 class ChemMatUserStats(QMainWindow):
@@ -10,6 +11,9 @@ class ChemMatUserStats(QMainWindow):
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         loadUi('UI_Forms/mainWindow.ui', self)
+
+
+
 
 
 if __name__ == '__main__':
