@@ -24,7 +24,11 @@
       </widget>
      </item>
      <item>
-      <widget class="QListWidget" name="itemListWidget"/>
+      <widget class="QListWidget" name="itemListWidget">
+       <property name="selectionMode">
+        <enum>QAbstractItemView::ExtendedSelection</enum>
+       </property>
+      </widget>
      </item>
      <item>
       <widget class="QDialogButtonBox" name="buttonBox">
