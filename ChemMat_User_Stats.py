@@ -1,5 +1,5 @@
 from PyQt5.uic import loadUi 
-from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog
+from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog, QInputDialog
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QIntValidator, QDoubleValidator
 from PyQt5.QtTest import QTest
@@ -30,6 +30,8 @@ class ChemMatUserStats(QMainWindow):
         self.initSignals()
         self.filterDict={}
         self.filterRangeItems=['Posted Date','Badge No','Experiment Id']
+        self.userInstitute = pd.read_excel('./Data/institution_data.xlsx')
+        self.countryState = self.userInstitute.set_index('Institution').to_dict()
 
 
     def initSignals(self):
@@ -39,6 +41,8 @@ class ChemMatUserStats(QMainWindow):
         self.duplicatePushButton.clicked.connect(self.removeDuplicates)
         self.blsPushButton.clicked.connect(self.removeBLS)
         self.calPushButton.clicked.connect(self.calStat)
+        self.exportStatPushButton.clicked.connect(self.saveStat)
+        self.exportDataPushButton.clicked.connect(self.saveFilterData)
 
     def readBLScientist(self):
         self.blSciData=pd.read_excel('./Data/BLscientist.xlsx')
@@ -147,7 +151,7 @@ class ChemMatUserStats(QMainWindow):
         dialog.label.setText('Select the catagory for removing duplicates:')
         if dialog.exec_():
             self.duplicateList = [item.text() for item in dialog.itemListWidget.selectedItems()]
-            print(self.duplicateList)
+           # print(self.duplicateList)
             self.filterListWidget.addItem('Remove Duplicates' + '::' + str(self.duplicateList))
             self.processFilter()
         else:
@@ -161,21 +165,52 @@ class ChemMatUserStats(QMainWindow):
         if self.calComboBox.currentText()=='Yearly Unique Users':
             pass
         elif self.calComboBox.currentText()=='US User Map':
-            pass
+            self.stateData = self.filterData.drop_duplicates(('Badge No', 'Institution'))[['Institution']]
+            self.stateData['Country'] = self.stateData['Institution'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
+            stateData=self.stateData[self.stateData['Country']=='USA']
+            stateData['State']=stateData['Institution'].apply(lambda x: self.countryState['State'][x] if x in self.countryState['State'] else self.updateCSD(x))
+            self.results = stateData['State'].value_counts().to_dict()
+            self.resultsNorm = stateData['State'].value_counts(normalize=True).to_dict()
+            self.showStat()
         elif self.calComboBox.currentText()=='World User Map':
-            pass
+            self.worldData = self.filterData.drop_duplicates(('Badge No', 'Institution'))[['Institution']]
+            self.worldData['Country'] = self.worldData['Institution'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
+            self.results=self.worldData['Country'].value_counts().to_dict()
+            self.resultsNorm=self.worldData['Country'].value_counts(normalize=True).to_dict()
+            self.showStat()
         else:
             self.results=self.filterData[self.calComboBox.currentText()].value_counts().to_dict()
             self.resultsNorm=self.filterData[self.calComboBox.currentText()].value_counts(normalize=True).to_dict()
             self.showStat()
 
     def showStat(self):
-        maxlen=max(list(map(len,self.results.keys())))
+        self.resultTextBrowser.clear()
         for key in self.results.keys():
-            self.resultTextBrowser.append('%-*s %-*d (%f%%)'%(maxlen,key,10,self.results[key],self.resultsNorm[key]*100))
+            self.resultTextBrowser.append('%s\t %d\t (%f%%)'%(key,self.results[key],self.resultsNorm[key]*100))
+
+    def saveStat(self):
+        filename=QFileDialog.getSaveFileName()[0]+'.xlsx'
+        if filename!='':
+            self.filterData[self.calComboBox.currentText()].value_counts().to_excel(filename)
+
+    def saveFilterData(self):
+        filename = QFileDialog.getSaveFileName()[0] + '.xlsx'
+        if filename != '':
+            self.filterData.to_excel(filename,index=False)
 
 
-
+    def updateCSD(self,institute):
+        x = QInputDialog.getText(self,'Enter Country','Please provide the country for %s' % institute)[0]
+        self.countryState['Country'][institute] = x
+        if x == 'USA':
+            y = QInputDialog.getText(self,'Enter US State','Please provide the state for %s (e.g IL for Illinois)' % institute)[0]
+            self.countryState['State'][institute] = y
+        else:
+            y=''
+        df=pd.DataFrame([[institute, x, y]], columns=['Institution', 'Country', 'State' ])
+        self.userInstitute=self.userInstitute.append(df, ignore_index=True)
+        self.userInstitute.to_excel('./Data/institution_data.xlsx',index=False)
+        return x
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
