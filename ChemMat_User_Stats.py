@@ -1,7 +1,7 @@
 from PyQt5.uic import loadUi 
 from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog, QInputDialog
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QIntValidator, QDoubleValidator
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont
 from PyQt5.QtTest import QTest
 import pyqtgraph
 import sys
@@ -9,6 +9,7 @@ import pandas as pd
 from pandas import Timestamp
 import os
 import copy
+import time
 
 class FilterRangeDialog(QDialog):
     def __init__(self, parent=None):
@@ -16,10 +17,15 @@ class FilterRangeDialog(QDialog):
         loadUi('UI_Forms/filterRangeDialog.ui', self)
 
 class FilterListDialog(QDialog):
-    def __init__(self, parent=None,items=None):
+    def __init__(self, parent=None,items=None,selectedItems=None):
         QDialog.__init__(self, parent)
         loadUi('UI_Forms/filterListDialog.ui', self)
         self.itemListWidget.addItems(items)
+        if selectedItems is not None:
+            for txt in selectedItems:
+                item=self.itemListWidget.findItems(txt,Qt.MatchExactly)
+                item[0].setSelected(True)
+
 
 class ChemMatUserStats(QMainWindow):
 
@@ -27,11 +33,37 @@ class ChemMatUserStats(QMainWindow):
         QWidget.__init__(self, parent)
         loadUi('UI_Forms/mainWindow.ui', self)
 
+        font=QFont('Monospace')
+        font.setStyleHint(QFont.TypeWriter)
+        font.setPointSize(8)
+        self.resultTextEdit.setCurrentFont(font)
+        #self.resultTextEdit.append('Mrinal is good')
+
+
         self.initSignals()
         self.filterDict={}
         self.filterRangeItems=['Posted Date','Badge No','Experiment Id']
         self.userInstitute = pd.read_excel('./Data/institution_data.xlsx')
         self.countryState = self.userInstitute.set_index('Institution').to_dict()
+
+        self.enableButtons(enable=False)
+
+    def enableButtons(self,enable=True):
+        #Disabling some of the buttons to start with
+        self.addFilterPushButton.setEnabled(enable)
+        self.saveFilterPushButton.setEnabled(enable)
+        self.loadFilterPushButton.setEnabled(enable)
+        self.duplicatePushButton.setEnabled(enable)
+        self.blsPushButton.setEnabled(enable)
+        self.upPushButton.setEnabled(enable)
+        self.downPushButton.setEnabled(enable)
+        self.removePushButton.setEnabled(enable)
+        self.calPushButton.setEnabled(enable)
+        self.exportStatPushButton.setEnabled(enable)
+        self.exportDataPushButton.setEnabled(enable)
+        self.plotStatPushButton.setEnabled(enable)
+
+
 
 
     def initSignals(self):
@@ -43,10 +75,21 @@ class ChemMatUserStats(QMainWindow):
         self.calPushButton.clicked.connect(self.calStat)
         self.exportStatPushButton.clicked.connect(self.saveStat)
         self.exportDataPushButton.clicked.connect(self.saveFilterData)
+        self.saveFilterPushButton.clicked.connect(self.saveFilter)
+        self.loadFilterPushButton.clicked.connect(self.loadFilter)
+        self.upPushButton.clicked.connect(self.moveFilterUp)
+        self.downPushButton.clicked.connect(self.moveFilterDown)
+        self.plotStatPushButton.clicked.connect(self.plotStat)
+        self.filterListWidget.itemDoubleClicked.connect(self.editFilter)
 
     def readBLScientist(self):
         self.blSciData=pd.read_excel('./Data/BLscientist.xlsx')
 
+    def moveFilterUp(self):
+        QMessageBox.information(self,"Information","This function is not implemented yet",QMessageBox.Ok)
+
+    def moveFilterDown(self):
+        QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
 
     def loadFile(self):
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
@@ -70,6 +113,10 @@ class ChemMatUserStats(QMainWindow):
             self.calComboBox.addItem('Yearly Unique Users')
             self.calComboBox.addItem('US User Map')
             self.calComboBox.addItem('World User Map')
+            self.enableButtons(enable=True)
+            self.exportStatPushButton.setEnabled(False)
+            self.plotStatPushButton.setEnabled(False)
+
 
     def addFilter(self):
         self.filterText=self.filterComboBox.currentText()
@@ -78,12 +125,18 @@ class ChemMatUserStats(QMainWindow):
         else:
             self.addFilterList()
 
-    def addFilterRange(self):
+    def addFilterRange(self,fromtxt=None,totxt=None):
         dialog=FilterRangeDialog(parent=self)
-        frommin=str(min(self.rawData[self.filterText]))
-        tomax=str(max(self.rawData[self.filterText]))
-        dialog.fromLineEdit.setText(frommin)
-        dialog.toLineEdit.setText(tomax)
+        if fromtxt is None:
+            frommin=str(min(self.rawData[self.filterText]))
+        else:
+            frommin=fromtxt
+        if totxt is None:
+            tomax=str(max(self.rawData[self.filterText]))
+        else:
+            tomax=totxt
+        dialog.fromLineEdit.setText(str(frommin))
+        dialog.toLineEdit.setText(str(tomax))
         if dialog.exec_():
             if self.filterText=='Posted Date':
                 self.fromValue=pd.to_datetime(dialog.fromLineEdit.text())
@@ -96,20 +149,22 @@ class ChemMatUserStats(QMainWindow):
                 QMessageBox.warning(self,'Value Error','Starting value is more than finishing value, please reenter!', QMessageBox.Ok)
             else:
                 self.filterDict[self.filterText]=[self.fromValue,self.toValue]
-                self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
-                #print(self.filterDict)
-                self.processFilter()
+                if fromtxt is None and totxt is None:
+                    self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
+                    #print(self.filterDict)
+                    self.processFilter()
         else:
             pass
 
-    def addFilterList(self):
-        dialog = FilterListDialog(parent=self,items=list(self.rawData[self.filterText].unique()))
+    def addFilterList(self,selectedItems=None):
+        dialog = FilterListDialog(parent=self,items=list(self.rawData[self.filterText].unique()),selectedItems=selectedItems)
         if dialog.exec_():
             self.filterList=[item.text() for item in dialog.itemListWidget.selectedItems()]
             #print(self.filterList)
             self.filterDict[self.filterText]=self.filterList
-            self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
-            self.processFilter()
+            if selectedItems is None:
+                self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
+                self.processFilter()
         else:
             pass
 
@@ -146,16 +201,16 @@ class ChemMatUserStats(QMainWindow):
                 self.filterListWidget.takeItem(row)
             self.processFilter()
 
-    def removeDuplicates(self):
-        dialog = FilterListDialog(parent=self, items=list(self.rawData.columns.values))
-        dialog.label.setText('Select the catagory for removing duplicates:')
+    def removeDuplicates(self,selectedItems=None):
+        dialog = FilterListDialog(parent=self, items=list(self.rawData.columns.values),selectedItems=selectedItems)
+        dialog.label.setText('Select the category for removing duplicates:')
         if dialog.exec_():
             self.duplicateList = [item.text() for item in dialog.itemListWidget.selectedItems()]
            # print(self.duplicateList)
-            self.filterListWidget.addItem('Remove Duplicates' + '::' + str(self.duplicateList))
-            self.processFilter()
-        else:
-            pass
+            if selectedItems is None:
+                self.filterListWidget.addItem('Remove Duplicates' + '::' + str(self.duplicateList))
+                self.processFilter()
+
 
     def removeBLS(self):
         self.filterListWidget.addItem('Remove BL Scientists::True')
@@ -183,19 +238,30 @@ class ChemMatUserStats(QMainWindow):
             self.resultsNorm=self.filterData[self.calComboBox.currentText()].value_counts(normalize=True).to_dict()
             self.showStat()
 
+
     def showStat(self):
-        self.resultTextBrowser.clear()
+        self.resultTextEdit.clear()
+        maxlen=max([len(key) for key in self.results.keys()])
         for key in self.results.keys():
-            self.resultTextBrowser.append('%s\t %d\t (%f%%)'%(key,self.results[key],self.resultsNorm[key]*100))
+            self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
+        self.exportStatPushButton.setEnabled(True)
+        self.plotStatPushButton.setEnabled(True)
 
     def saveStat(self):
-        filename=QFileDialog.getSaveFileName()[0]+'.xlsx'
+        filename=QFileDialog.getSaveFileName(self,"Save as Excel file",filter='Excel Files (*.xlsx)')[0]
         if filename!='':
+            if os.path.splitext(filename)[1] == '':
+                filename = filename + '.xlsx'
             self.filterData[self.calComboBox.currentText()].value_counts().to_excel(filename)
 
+    def plotStat(self):
+        QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
+
     def saveFilterData(self):
-        filename = QFileDialog.getSaveFileName()[0] + '.xlsx'
+        filename = QFileDialog.getSaveFileName(self,"Save as Excel file",filter='Excel Files (*.xlsx)')[0]
         if filename != '':
+            if os.path.splitext(filename)[1] == '':
+                filename = filename + '.xlsx'
             self.filterData.to_excel(filename,index=False)
 
 
@@ -211,6 +277,56 @@ class ChemMatUserStats(QMainWindow):
         self.userInstitute=self.userInstitute.append(df, ignore_index=True)
         self.userInstitute.to_excel('./Data/institution_data.xlsx',index=False)
         return x
+
+    def saveFilter(self):
+        if self.filterListWidget.count()!=0:
+            filename=QFileDialog.getSaveFileName(self,'Save Filter as',filter='Filter file (*.fil)')[0]
+            if os.path.splitext(filename)[1]=='':
+                filename=filename+'.fil'
+            if filename!='':
+                fh=open(filename,'w')
+                fh.write('# Filter file created on '+time.asctime()+'\n')
+                for i in range(self.filterListWidget.count()):
+                    fh.write(self.filterListWidget.item(i).text()+'\n')
+        else:
+            QMessageBox.warning(self,'Filter Error','No filter to save. Please add some filters before saving.',QMessageBox.Ok)
+
+    def loadFilter(self):
+        filename=QFileDialog.getOpenFileName(self,'Select Filter file',filter='Filter file (*.fil)')[0]
+        if filename!='':
+            fh=open(filename,'r')
+            lines=fh.readlines()
+            for line in lines:
+                if line[0]!='#':
+                    self.filterListWidget.addItem(line[:-1])
+                    filterKey,filterVal=line[:-1].split('::')
+                    filterVal=eval(filterVal)
+                    if filterKey=='Remove Duplicates':
+                        self.duplicateList=filterVal
+            self.processFilter()
+
+    def editFilter(self,item):
+        filterKey,filterVal=item.text().split('::')
+        filterVal=eval(filterVal)
+        self.filterText = self.filterComboBox.currentText()
+        if filterKey=='Remove Duplicates':
+            self.removeDuplicates(selectedItems=filterVal)
+            item.setText('Remove Duplicates' + '::' + str(self.duplicateList))
+        elif filterKey in self.filterRangeItems:
+            self.addFilterRange(fromtxt=filterVal[0],totxt=filterVal[1])
+            item.setText(self.filterText + '::' + str(self.filterDict[self.filterText]))
+        elif filterKey=='Remove BL Scientists':
+            QMessageBox.warning(self,"Restricted Filter","This filter cannot be edited. Please change the BLscientist.xlsx file to edit/add/remove the information about the beamline scientists.",QMessageBox.Ok)
+            return
+        else:
+            self.addFilterList(selectedItems=filterVal)
+            item.setText(self.filterText + '::' + str(self.filterDict[self.filterText]))
+        self.processFilter()
+
+
+
+
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
