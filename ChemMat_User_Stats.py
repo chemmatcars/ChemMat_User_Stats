@@ -70,7 +70,7 @@ class ChemMatUserStats(QMainWindow):
         self.loadPushButton.clicked.connect(self.loadFile)
         self.addFilterPushButton.clicked.connect(self.addFilter)
         self.removePushButton.clicked.connect(self.removeFilterItem)
-        self.duplicatePushButton.clicked.connect(self.removeDuplicates)
+        self.duplicatePushButton.clicked.connect(lambda x: self.removeDuplicates(selectedItems=None))
         self.blsPushButton.clicked.connect(self.removeBLS)
         self.calPushButton.clicked.connect(self.calStat)
         self.exportStatPushButton.clicked.connect(self.saveStat)
@@ -110,7 +110,7 @@ class ChemMatUserStats(QMainWindow):
             self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.rawData.shape)
             self.calComboBox.clear()
             self.calComboBox.addItems(list(self.rawData.columns.values))
-            self.calComboBox.addItem('Yearly Unique Users')
+            self.calComboBox.addItem('Unique Users')
             self.calComboBox.addItem('US User Map')
             self.calComboBox.addItem('World User Map')
             self.enableButtons(enable=True)
@@ -233,6 +233,9 @@ class ChemMatUserStats(QMainWindow):
             self.results=self.worldData['Country'].value_counts().to_dict()
             self.resultsNorm=self.worldData['Country'].value_counts(normalize=True).to_dict()
             self.showStat()
+        elif self.calComboBox.currentText()=="Unique Users":
+            self.calcUniqueUsers()
+            self.showStat()
         else:
             self.results=self.filterData[self.calComboBox.currentText()].value_counts().to_dict()
             self.resultsNorm=self.filterData[self.calComboBox.currentText()].value_counts(normalize=True).to_dict()
@@ -243,7 +246,10 @@ class ChemMatUserStats(QMainWindow):
         self.resultTextEdit.clear()
         maxlen=max([len(key) for key in self.results.keys()])
         for key in self.results.keys():
-            self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
+            try:
+                self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
+            except:
+                self.resultTextEdit.append('{:<{width}} {:10d}'.format(key, self.results[key],width=maxlen))
         self.exportStatPushButton.setEnabled(True)
         self.plotStatPushButton.setEnabled(True)
 
@@ -252,7 +258,10 @@ class ChemMatUserStats(QMainWindow):
         if filename!='':
             if os.path.splitext(filename)[1] == '':
                 filename = filename + '.xlsx'
-            self.filterData[self.calComboBox.currentText()].value_counts().to_excel(filename)
+            #self.filterData[self.calComboBox.currentText()].value_counts().to_excel(filename)
+            data=pd.DataFrame.from_dict(self.results,orient='index').reset_index()
+            data.columns = ['Categories', self.calComboBox.currentText()]
+            data.to_excel(filename,index=False)
 
     def plotStat(self):
         QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
@@ -322,6 +331,17 @@ class ChemMatUserStats(QMainWindow):
             self.addFilterList(selectedItems=filterVal)
             item.setText(self.filterText + '::' + str(self.filterDict[self.filterText]))
         self.processFilter()
+
+    def calcUniqueUsers(self):
+        #frequency=QInputDialog.getInt(self,"Input Frequency","Frequency of years at which you like to calculate Unique Users",value=1)[0]
+        data_raw_sort = self.filterData.sort_values('Posted Date')
+        startDate = min(data_raw_sort['Posted Date'])
+        endDate=max(data_raw_sort['Posted Date'])
+        data_raw_sort = data_raw_sort.set_index(['Posted Date'])
+        dates = pd.date_range(start=startDate,end=endDate, freq='AS')
+        self.results = {}
+        for i, date in enumerate(dates[:-1]):
+            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge No','Institution')).count()['Badge No']
 
 
 
