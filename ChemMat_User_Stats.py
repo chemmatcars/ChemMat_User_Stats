@@ -36,7 +36,8 @@ class ChemMatUserStats(QMainWindow):
         font=QFont('Monospace')
         font.setStyleHint(QFont.TypeWriter)
         font.setPointSize(8)
-        self.resultTextEdit.setCurrentFont(font)
+        #self.resultTextEdit.setCurrentFont(font)
+        self.resultTextBrowser.setCurrentFont(font)
         #self.resultTextEdit.append('Mrinal is good')
 
 
@@ -92,6 +93,7 @@ class ChemMatUserStats(QMainWindow):
         QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
 
     def loadFile(self):
+        self.filterListWidget.clear()
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
         if self.fileName!='':
             self.fileLabel.setText(self.fileName)
@@ -103,7 +105,7 @@ class ChemMatUserStats(QMainWindow):
             self.rawData.dropna(axis=1,how='all')
             self.rawData['Posted Date'] = pd.to_datetime(self.rawData['Posted Date'])
             self.filterData=copy.copy(self.rawData)
-            self.rawDataTableWidget.setData(self.rawData.transpose().to_dict())
+            #self.rawDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filteredDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filterComboBox.clear()
             self.filterComboBox.addItems(list(self.rawData.columns.values))
@@ -243,13 +245,18 @@ class ChemMatUserStats(QMainWindow):
 
 
     def showStat(self):
-        self.resultTextEdit.clear()
+        #self.resultTextEdit.clear()
+        self.resultTextBrowser.clear()
         maxlen=max([len(key) for key in self.results.keys()])
         for key in self.results.keys():
             try:
-                self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
+                #self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
+                self.resultTextBrowser.append(
+                    '{:<{width}} {:10d} ({:5.3f}%)'.format(key, self.results[key], self.resultsNorm[key] * 100,
+                                                           width=maxlen))
             except:
-                self.resultTextEdit.append('{:<{width}} {:10d}'.format(key, self.results[key],width=maxlen))
+                #self.resultTextEdit.append('{:<{width}} {:10d}'.format(key, self.results[key],width=maxlen))
+                self.resultTextBrowser.append('{:<{width}} {:10d}'.format(key, self.results[key], width=maxlen))
         self.exportStatPushButton.setEnabled(True)
         self.plotStatPushButton.setEnabled(True)
 
@@ -317,7 +324,7 @@ class ChemMatUserStats(QMainWindow):
     def editFilter(self,item):
         filterKey,filterVal=item.text().split('::')
         filterVal=eval(filterVal)
-        self.filterText = self.filterComboBox.currentText()
+        self.filterText = filterKey
         if filterKey=='Remove Duplicates':
             self.removeDuplicates(selectedItems=filterVal)
             item.setText('Remove Duplicates' + '::' + str(self.duplicateList))
