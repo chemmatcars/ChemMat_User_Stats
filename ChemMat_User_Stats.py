@@ -10,6 +10,20 @@ from pandas import Timestamp
 import os
 import copy
 import time
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.io.shapereader as shpreader
+import shapely
+from matplotlib.colors import hsv_to_rgb
+from matplotlib import ticker
+import numpy as np
+
+
+class PlotDialog(QDialog):
+    def __init__(self,parent):
+        QDialog.__init__(self,parent)
+        loadUi('UI_Forms/mplPlot.ui',self)
+
 
 class FilterRangeDialog(QDialog):
     def __init__(self, parent=None):
@@ -46,6 +60,7 @@ class ChemMatUserStats(QMainWindow):
         self.filterRangeItems=['Posted Date','Badge No','Experiment Id']
         self.userInstitute = pd.read_excel('./Data/institution_data.xlsx')
         self.countryState = self.userInstitute.set_index('Institution').to_dict()
+        self.CountryNames=pd.read_excel('./Data/Countries.xlsx').set_index('DB_Name').to_dict()
 
         self.enableButtons(enable=False)
 
@@ -105,7 +120,6 @@ class ChemMatUserStats(QMainWindow):
             self.rawData.dropna(axis=1,how='all')
             self.rawData['Posted Date'] = pd.to_datetime(self.rawData['Posted Date'])
             self.filterData=copy.copy(self.rawData)
-            #self.rawDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filteredDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filterComboBox.clear()
             self.filterComboBox.addItems(list(self.rawData.columns.values))
@@ -153,7 +167,6 @@ class ChemMatUserStats(QMainWindow):
                 self.filterDict[self.filterText]=[self.fromValue,self.toValue]
                 if fromtxt is None and totxt is None:
                     self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
-                    #print(self.filterDict)
                     self.processFilter()
         else:
             pass
@@ -252,7 +265,7 @@ class ChemMatUserStats(QMainWindow):
             try:
                 #self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
                 self.resultTextBrowser.append(
-                    '{:<{width}} {:10d} ({:5.3f}%)'.format(key, self.results[key], self.resultsNorm[key] * 100,
+                    '{:<{width}} {:>10d} ({:>5.3f}%)'.format(key, self.results[key], self.resultsNorm[key] * 100,
                                                            width=maxlen))
             except:
                 #self.resultTextEdit.append('{:<{width}} {:10d}'.format(key, self.results[key],width=maxlen))
@@ -271,7 +284,13 @@ class ChemMatUserStats(QMainWindow):
             data.to_excel(filename,index=False)
 
     def plotStat(self):
-        QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
+        data = pd.DataFrame.from_dict(self.results, orient='index', columns=[self.calComboBox.currentText()])
+        if self.calComboBox.currentText()=='US User Map':
+            self.create_us_map(data,usersCol=self.calComboBox.currentText())
+        elif self.calComboBox.currentText()=='World User Map':
+            self.create_world_map(data,usersCol=self.calComboBox.currentText())
+        else:
+            QMessageBox.information(self, "Information", "This function is not implemented yet", QMessageBox.Ok)
 
     def saveFilterData(self):
         filename = QFileDialog.getSaveFileName(self,"Save as Excel file",filter='Excel Files (*.xlsx)')[0]
@@ -351,8 +370,206 @@ class ChemMatUserStats(QMainWindow):
             self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge No','Institution')).count()['Badge No']
 
 
+    def create_us_map(self,data,usersCol='users',mapType='Accent',textSize=8):
+        self.mapPlotDlg = PlotDialog(self)
+        self.maxu=max(data[usersCol])
+        self.minu=0
+
+        self.statesInfo = {
+            'New Jersey':  ['NJ',[-74.48,40.16],[-72.36,39.46]],
+            'Rhode Island':   ['RI',[-71.55,41.67],[-67.5,39.44]],
+            'Massachusetts':   ['MA',[-71.9,42.4],[-67.9,42.4]],
+            'Connecticut':    ['CT',[-72.7,41.9],[-69.7,38.9]],
+            'Maryland':   ['MD',[-76.1,38.7],[-73.1,35.2]],
+            'New York':    ['NY',[-75.3,42.9]],
+            'Delaware':    ['DE',[-75.45,38.79],[-72.45,37.79]],
+            'Florida':     ['FL',[-82.1,27.5]],
+            'Ohio':  ['OH',[-83.2,40.1]],
+            'Pennsylvania':  ['PA',[-78.6,40.7]],
+            'Illinois':    ['IL',[-89.6,39.8]],
+            'California':  ['CA',[-121.6,37.36]],
+            'Virginia':    ['VA',[-79.3,37.4]],
+            'Michigan':    ['MI',[-85.6,42.8]],
+            'Indiana':    ['IN',[-86.9,39.3]],
+            'North Carolina':  ['NC',[-78.8,35.1]],
+            'Georgia':     ['GA',[-84,32.2]],
+            'Tennessee':   ['TN',[-87.8,35.5]],
+            'New Hampshire':   ['NH',[-71.5,43.5],[-72.2,48.5]],
+            'South Carolina':  ['SC',[-81.2,33.6]],
+            'Louisiana':   ['LA',[-93,30.4]],
+            'Kentucky':   ['KY',[-85.5,37.3]],
+            'Wisconsin':  ['WI',[-90.3,43.5]],
+            'Washington':  ['WA',[-121.3,47.45]],
+            'Alabama':     ['AL',[-87.7,32.4]],
+            'Missouri':    ['MO',[-93.4,38.1]],
+            'Texas':   ['TX',[-99.79,31.59]],
+            'West Virginia':   ['WV',[-81.5,38.2]],
+            'Vermont':     ['VT',[-72.1,44.1],[-76.1,47.1]],
+            'Minnesota':  ['MN',[-95.3,45.63]],
+            'Mississippi':   ['MS',[-90.3,32.2]],
+            'Iowa':  ['IA',[-94.43,41.3]],
+            'Arkansas':    ['AR',[-93.4,34.1]],
+            'Oklahoma':    ['OK',[-98.26,35.24]],
+            'Arizona':     ['AZ',[-112.7,33.93]],
+            'Colorado':    ['CO',[-106.8,38.63]],
+            'Maine':  ['ME',[-69.7,44.9]],
+            'Oregon':  ['OR',[-122,43.6]],
+            'Kansas':  ['KS',[-99.57,38.3]],
+            'Utah':  ['UT',[-112.6,39.18]],
+            'Nebraska':    ['NE',[-100.9,41.26]],
+            'Nevada':  ['NV',[-117.3,39.24]],
+            'Idaho':   ['ID',[-115.8,43.51]],
+            'New Mexico':  ['NM',[-107.2,33.15]],
+            'South Dakota':  ['SD',[-101.5,44.21]],
+            'North Dakota':  ['ND',[-101.5,47.16]],
+            'Montana':     ['MT',[-111.4,46.57]],
+            'Wyoming':      ['WY',[-108.8,42.79]],
+            'Hawaii': ['HI',[-107.4,25.02]],
+            'Alaska': ['AK',[-117,27.57]]}
+
+        shapename = 'admin_1_states_provinces_lakes'
+        self.states_shp = shpreader.natural_earth(resolution='110m',
+                                             category='cultural', name=shapename)
+        self.mapPlotDlg.closePushButton.clicked.connect(self.mapPlotDlg.done)
+        self.mapPlotDlg.savePlotPushButton.clicked.connect(self.mapPlotSave)
+        self.mapPlotDlg.colorMapComboBox.addItems(plt.colormaps())
+        self.mapPlotDlg.colorMapComboBox.currentIndexChanged.connect(lambda x: self.mapChanged(type='US'))
+        self.mapPlotDlg.textSizeSpinBox.valueChanged.connect(lambda x: self.mapChanged(type='US'))
+        self.mapPlotDlg.colorBinsSpinBox.valueChanged.connect(lambda x: self.mapChanged(type='US'))
+        # self.mapPlotDlg.colorMapComboBox.setCurrentIndex(1)
+        # self.mapPlotDlg.textSizeSpinBox.setValue(6)
+        self.mapChanged()
+        self.mapPlotDlg.exec_()
+
+    def mapChanged(self,type='US'):
+        colorMap=self.mapPlotDlg.colorMapComboBox.currentText()
+        val = self.mapPlotDlg.textSizeSpinBox.value()
+        nbins=self.mapPlotDlg.colorBinsSpinBox.value()
+        data = pd.DataFrame.from_dict(self.results, orient='index', columns=[self.calComboBox.currentText()])
+        if type=='US':
+            self.updateUSMap(data,mapType=colorMap,textSize=val,nbins=nbins)
+        else:
+            self.updateWorldMap(data, mapType=colorMap,textSize=val,nbins=nbins)
 
 
+    def mapPlotSave(self):
+        fname=QFileDialog.getSaveFileName(self.mapPlotDlg,"Save image as",filter="Image Files (*.png *.tif)")[0]
+        if fname!='':
+            if os.path.splitext(fname)[1]=='':
+                fname=fname+".png"
+            self.mapPlotDlg.mplWidget.figure.savefig(fname,dpi=300)
+
+    def updateUSMap(self,data,mapType='Accent',textSize=8,nbins=5):
+        self.plotAxes = self.mapPlotDlg.mplWidget.figure.clear()
+        self.plotAxes = self.mapPlotDlg.mplWidget.figure.add_axes([0, 0, 1, 1], projection=ccrs.PlateCarree())
+        self.plotAxes.set_extent([-130, -60, 22, 45], ccrs.Geodetic())
+        self.plotAxes.background_patch.set_visible(False)
+        self.plotAxes.outline_patch.set_visible(False)
+        self.plotAxes.set_title("US User Map")
+
+        cmap = plt.cm.get_cmap(mapType,nbins)
+        for astate in shpreader.Reader(self.states_shp).records():
+            name=self.statesInfo[astate.attributes['name_en']][0]
+            edgecolor = 'black'
+            if name in data.index:
+                user=data.loc[name].values[0]
+            else:
+                user=0.0
+            facecolor=cmap(np.sqrt((user-self.minu)/(self.maxu-self.minu)))
+            xoffset=0
+            yoffset=0
+            xfact=1.0
+            yfact=1.0
+            if astate.attributes['name_en']=='Alaska':
+                xoffset=35
+                yoffset=-36
+                xfact=0.2
+                yfact=0.4
+            elif astate.attributes['name_en']=='Hawaii':
+                xoffset=52
+                yoffset=5
+                xfact=1.2
+                yfact=1.2
+
+            self.plotAxes.add_geometries([shapely.affinity.translate(shapely.affinity.scale(astate.geometry,xfact=xfact,yfact=yfact),\
+                                                           xoff=xoffset,yoff=yoffset)], ccrs.PlateCarree(), edgecolor=edgecolor,facecolor=facecolor)
+
+            try:
+                x,y=self.statesInfo[astate.attributes['name_en']][1]
+                try:
+                    xt,yt=self.statesInfo[astate.attributes['name_en']][2]
+                    self.plotAxes.annotate(name,xy=(x,y),xycoords='data',xytext=(xt,yt),textcoords='data',arrowprops=dict(arrowstyle="-",
+                                      connectionstyle="arc3,rad=0."),annotation_clip=True,size=textSize)
+                except:
+                    self.plotAxes.text(x,y,name,size=textSize)
+            except:
+                pass
+
+        if 'DC' in data.index:
+            user=data.loc['DC'].values[0]
+        else:
+            user=0.0
+        facecolor=cmap(np.sqrt((user-self.minu)/(self.maxu-self.minu)))
+        circle1=plt.Circle((-77.13,39.02),0.5,linewidth=1,edgecolor='k',facecolor=facecolor)
+        plt.gcf().gca().add_artist(circle1)
+        self.plotAxes.annotate('DC',xy=(-77.13,39.02),xycoords='data',xytext=(-74.13,34.02),textcoords='data',arrowprops=dict(arrowstyle="-",
+                                      connectionstyle="arc3,rad=0."),annotation_clip=True,size=textSize)
+
+        sm = plt.cm.ScalarMappable(cmap=cmap)
+        sm._A = []
+        cbar=plt.colorbar(sm,ax=self.plotAxes,shrink=0.25,pad=0.05)
+        tick_locator=ticker.MaxNLocator(nbins=nbins)
+        cbar.locator=tick_locator
+        cbar.update_ticks()
+        cbar.ax.set_yticklabels(['%.1f'%(self.minu+t**2*self.maxu) for t in cbar.ax.get_yticks()],size=textSize)
+        self.mapPlotDlg.mplWidget.canvas.draw()
+
+    def create_world_map(self,data,usersCol='users',mapType='Accent',textSize=8,nbins=5):
+        self.mapPlotDlg = PlotDialog(self)
+        self.maxu=max(data[usersCol])
+        self.minu=0
+
+        shapename = 'admin_0_countries'
+        self.country_shp = shpreader.natural_earth(resolution='110m',
+                                             category='cultural', name=shapename)
+        #self.updateUSMap(data,mapType=mapType,textSize=textSize)
+        self.mapPlotDlg.closePushButton.clicked.connect(self.mapPlotDlg.done)
+        self.mapPlotDlg.savePlotPushButton.clicked.connect(self.mapPlotSave)
+        self.mapPlotDlg.colorMapComboBox.addItems(plt.colormaps())
+        self.mapPlotDlg.colorMapComboBox.currentIndexChanged.connect(lambda x:self.mapChanged(type='World'))
+        self.mapPlotDlg.textSizeSpinBox.valueChanged.connect(lambda x:self.mapChanged(type='World'))
+        self.mapPlotDlg.colorBinsSpinBox.valueChanged.connect(lambda x: self.mapChanged(type='World'))
+        self.mapChanged(type='World')
+        self.mapPlotDlg.exec_()
+
+    def updateWorldMap(self,data,mapType='Accent',textSize=8,nbins=5):
+        self.plotAxes = self.mapPlotDlg.mplWidget.figure.clear()
+        self.plotAxes = self.mapPlotDlg.mplWidget.figure.add_axes([0, 0, 1, 1], projection=ccrs.PlateCarree())
+        #self.plotAxes.set_extent([-130, -60, 22, 45], ccrs.Geodetic())
+        self.plotAxes.background_patch.set_visible(False)
+        self.plotAxes.outline_patch.set_visible(False)
+        self.plotAxes.set_title('World User Map')
+
+        cmap = plt.cm.get_cmap(mapType, nbins)
+        for astate in shpreader.Reader(self.country_shp).records():
+            name = self.CountryNames['APS_Name'][astate.attributes['NAME_EN']]
+            edgecolor = 'black'
+            if name in data.index:
+                user = data.loc[name].values[0]
+            else:
+                user = 0.0
+            facecolor = cmap(np.sqrt((user - self.minu) / (self.maxu - self.minu)))
+            self.plotAxes.add_geometries([astate.geometry], ccrs.PlateCarree(), edgecolor=edgecolor,
+                facecolor=facecolor)
+
+        sm = plt.cm.ScalarMappable(cmap=cmap)
+        sm._A = []
+        cbar = plt.colorbar(sm, ax=self.plotAxes, shrink=0.25, pad=0.05)
+        tick_locator = ticker.MaxNLocator(nbins=nbins)
+        cbar.locator = tick_locator
+        cbar.update_ticks()
+        cbar.ax.set_yticklabels(['%.1f' % (self.minu + t ** 2 * self.maxu) for t in cbar.ax.get_yticks()],size=textSize)
+        self.mapPlotDlg.mplWidget.canvas.draw()
 
 
 if __name__ == '__main__':
