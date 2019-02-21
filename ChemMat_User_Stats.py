@@ -61,6 +61,7 @@ class ChemMatUserStats(QMainWindow):
         self.userInstitute = pd.read_excel('./Data/institution_data.xlsx')
         self.countryState = self.userInstitute.set_index('Institution').to_dict()
         self.CountryNames=pd.read_excel('./Data/Countries.xlsx').set_index('DB_Name').to_dict()
+        self.msiList=pd.read_excel('./Data/MSI-master-list.xls',skiprows=1)
 
         self.enableButtons(enable=False)
 
@@ -111,6 +112,7 @@ class ChemMatUserStats(QMainWindow):
         self.filterListWidget.clear()
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
         if self.fileName!='':
+            QApplication.setOverrideCursor(Qt.WaitCursor)
             self.fileLabel.setText(self.fileName)
             extn=os.path.splitext(self.fileName)[1]
             if extn=='.xlsx':
@@ -119,10 +121,12 @@ class ChemMatUserStats(QMainWindow):
                 self.rawData=pd.read_csv(self.fileName)
             self.rawData.dropna(axis=1,how='all')
             self.rawData['Posted Date'] = pd.to_datetime(self.rawData['Posted Date'])
+            self.rawData['MSI']=np.where(self.rawData['Institution'].isin(self.msiList['Name']),'True','False')
             self.filterData=copy.copy(self.rawData)
             self.filteredDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filterComboBox.clear()
             self.filterComboBox.addItems(list(self.rawData.columns.values))
+            #self.filterComboBox.addItem('MSI')
             self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.rawData.shape)
             self.calComboBox.clear()
             self.calComboBox.addItems(list(self.rawData.columns.values))
@@ -180,8 +184,6 @@ class ChemMatUserStats(QMainWindow):
             if selectedItems is None:
                 self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
                 self.processFilter()
-        else:
-            pass
 
     def processFilter(self):
         self.filterData=copy.copy(self.rawData)
@@ -200,7 +202,6 @@ class ChemMatUserStats(QMainWindow):
                 self.filterData=self.filterData[(self.filterData[filterKey] >= filterVal[0]) & (self.filterData[filterKey] <= filterVal[1])]
                 #self.filteredDataTableWidget.clear()
                 #print(self.filterData.rows.count())
-
             else:
                 self.filterData = self.filterData[self.filterData[filterKey].isin(filterVal)]
         self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.filterData.shape)
