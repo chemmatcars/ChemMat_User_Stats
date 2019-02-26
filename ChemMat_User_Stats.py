@@ -112,7 +112,7 @@ class ChemMatUserStats(QMainWindow):
         self.filterListWidget.clear()
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
         if self.fileName!='':
-            QApplication.setOverrideCursor(Qt.WaitCursor)
+            #QApplication.setOverrideCursor(Qt.WaitCursor)
             self.fileLabel.setText(self.fileName)
             extn=os.path.splitext(self.fileName)[1]
             if extn=='.xlsx':
@@ -271,6 +271,8 @@ class ChemMatUserStats(QMainWindow):
             except:
                 #self.resultTextEdit.append('{:<{width}} {:10d}'.format(key, self.results[key],width=maxlen))
                 self.resultTextBrowser.append('{:<{width}} {:10d}'.format(key, self.results[key], width=maxlen))
+        self.resultTextBrowser.append('----------------------\n')
+        self.resultTextBrowser.append('{:<{width}} {:10d}'.format('Total', np.sum(list(self.results.values())), width=maxlen))
         self.exportStatPushButton.setEnabled(True)
         self.plotStatPushButton.setEnabled(True)
 
@@ -282,7 +284,10 @@ class ChemMatUserStats(QMainWindow):
             #self.filterData[self.calComboBox.currentText()].value_counts().to_excel(filename)
             data=pd.DataFrame.from_dict(self.results,orient='index').reset_index()
             data.columns = ['Categories', self.calComboBox.currentText()]
-            data.to_excel(filename,index=False)
+            try:
+                data.to_excel(filename,index=False)
+            except:
+                QMessageBox.warning(self,"File error","Please check the file is either open in MS Excel or used by some other programs. Try again after closing the file or the program using the file.",QMessageBox.Ok)
 
     def plotStat(self):
         data = pd.DataFrame.from_dict(self.results, orient='index', columns=[self.calComboBox.currentText()])
@@ -298,7 +303,10 @@ class ChemMatUserStats(QMainWindow):
         if filename != '':
             if os.path.splitext(filename)[1] == '':
                 filename = filename + '.xlsx'
-            self.filterData.to_excel(filename,index=False)
+            try:
+                self.filterData.to_excel(filename,index=False)
+            except:
+                QMessageBox.warning(self,"File error","Please check the file is either open in MS Excel or used by some other programs. Try again after closing the file or the program using the file.",QMessageBox.Ok)
 
 
     def updateCSD(self,institute):
@@ -362,10 +370,12 @@ class ChemMatUserStats(QMainWindow):
     def calcUniqueUsers(self):
         #frequency=QInputDialog.getInt(self,"Input Frequency","Frequency of years at which you like to calculate Unique Users",value=1)[0]
         data_raw_sort = self.filterData.sort_values('Posted Date')
-        startDate = min(data_raw_sort['Posted Date'])
-        endDate=max(data_raw_sort['Posted Date'])
+        startDate = '1/1/'+str(min(data_raw_sort['Posted Date']).date().year)
+        endDate='1/1/'+str(max(data_raw_sort['Posted Date']).date().year+1)
+
         data_raw_sort = data_raw_sort.set_index(['Posted Date'])
         dates = pd.date_range(start=startDate,end=endDate, freq='AS')
+        print(dates)
         self.results = {}
         for i, date in enumerate(dates[:-1]):
             self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge No','Institution')).count()['Badge No']
