@@ -1,7 +1,7 @@
 from PyQt5.uic import loadUi 
 from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog, QInputDialog
 from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont
+from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont,QCursor
 from PyQt5.QtTest import QTest
 import pyqtgraph
 import sys
@@ -112,7 +112,7 @@ class ChemMatUserStats(QMainWindow):
         self.filterListWidget.clear()
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
         if self.fileName!='':
-            #QApplication.setOverrideCursor(Qt.WaitCursor)
+            QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
             self.fileLabel.setText(self.fileName)
             extn=os.path.splitext(self.fileName)[1]
             if extn=='.xlsx':
@@ -131,11 +131,13 @@ class ChemMatUserStats(QMainWindow):
             self.calComboBox.clear()
             self.calComboBox.addItems(list(self.rawData.columns.values))
             self.calComboBox.addItem('Unique Users')
+            self.calComboBox.addItem('Unique Institutions')
             self.calComboBox.addItem('US User Map')
             self.calComboBox.addItem('World User Map')
             self.enableButtons(enable=True)
             self.exportStatPushButton.setEnabled(False)
             self.plotStatPushButton.setEnabled(False)
+            QApplication.restoreOverrideCursor()
 
 
     def addFilter(self):
@@ -186,6 +188,7 @@ class ChemMatUserStats(QMainWindow):
                 self.processFilter()
 
     def processFilter(self):
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         self.filterData=copy.copy(self.rawData)
         self.readBLScientist()
         for i in range(self.filterListWidget.count()):
@@ -206,6 +209,7 @@ class ChemMatUserStats(QMainWindow):
                 self.filterData = self.filterData[self.filterData[filterKey].isin(filterVal)]
         self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.filterData.shape)
         self.filteredDataTableWidget.setData(self.filterData.transpose().to_dict())
+        QApplication.restoreOverrideCursor()
 
 
     def removeFilterItem(self):
@@ -233,13 +237,15 @@ class ChemMatUserStats(QMainWindow):
         self.processFilter()
 
     def calStat(self):
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         if self.calComboBox.currentText()=='Yearly Unique Users':
             pass
         elif self.calComboBox.currentText()=='US User Map':
             self.stateData = self.filterData.drop_duplicates(('Badge No', 'Institution'))[['Institution']]
             self.stateData['Country'] = self.stateData['Institution'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
             stateData=self.stateData[self.stateData['Country']=='USA']
-            stateData['State']=stateData['Institution'].apply(lambda x: self.countryState['State'][x] if x in self.countryState['State'] else self.updateCSD(x))
+            y=stateData['Institution']
+            stateData['State']=y.apply(lambda x: self.countryState['State'][x] if x in self.countryState['State'] else self.updateCSD(x))
             self.results = stateData['State'].value_counts().to_dict()
             self.resultsNorm = stateData['State'].value_counts(normalize=True).to_dict()
             self.showStat()
@@ -252,16 +258,21 @@ class ChemMatUserStats(QMainWindow):
         elif self.calComboBox.currentText()=="Unique Users":
             self.calcUniqueUsers()
             self.showStat()
+        elif self.calComboBox.currentText()=="Unique Institutions":
+            self.calcUniqueInstitutions()
+            self.showStat()
         else:
             self.results=self.filterData[self.calComboBox.currentText()].value_counts().to_dict()
             self.resultsNorm=self.filterData[self.calComboBox.currentText()].value_counts(normalize=True).to_dict()
             self.showStat()
+        QApplication.restoreOverrideCursor()
 
 
     def showStat(self):
         #self.resultTextEdit.clear()
         self.resultTextBrowser.clear()
-        maxlen=max([len(key) for key in self.results.keys()])
+        print(self.results)
+        maxlen=max([len(str(key)) for key in self.results.keys()])
         for key in self.results.keys():
             try:
                 #self.resultTextEdit.append('{:<{width}} {:10d} ({:5.3f}%)'.format(key,self.results[key],self.resultsNorm[key]*100,width=maxlen))
@@ -338,6 +349,7 @@ class ChemMatUserStats(QMainWindow):
     def loadFilter(self):
         filename=QFileDialog.getOpenFileName(self,'Select Filter file',filter='Filter file (*.fil)')[0]
         if filename!='':
+            self.filterListWidget.clear()
             fh=open(filename,'r')
             lines=fh.readlines()
             for line in lines:
@@ -368,6 +380,10 @@ class ChemMatUserStats(QMainWindow):
         self.processFilter()
 
     def calcUniqueUsers(self):
+        """
+        Calculate the frenquency of Unique Users per year
+        :return:
+        """
         #frequency=QInputDialog.getInt(self,"Input Frequency","Frequency of years at which you like to calculate Unique Users",value=1)[0]
         data_raw_sort = self.filterData.sort_values('Posted Date')
         startDate = '1/1/'+str(min(data_raw_sort['Posted Date']).date().year)
@@ -375,10 +391,25 @@ class ChemMatUserStats(QMainWindow):
 
         data_raw_sort = data_raw_sort.set_index(['Posted Date'])
         dates = pd.date_range(start=startDate,end=endDate, freq='AS')
-        print(dates)
         self.results = {}
         for i, date in enumerate(dates[:-1]):
             self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge No','Institution')).count()['Badge No']
+
+    def calcUniqueInstitutions(self):
+        """
+        Calculate the frenquency of Unique Insitutions per year
+        :return:
+        """
+        #frequency=QInputDialog.getInt(self,"Input Frequency","Frequency of years at which you like to calculate Unique Users",value=1)[0]
+        data_raw_sort = self.filterData.sort_values('Posted Date')
+        startDate = '1/1/'+str(min(data_raw_sort['Posted Date']).date().year)
+        endDate='1/1/'+str(max(data_raw_sort['Posted Date']).date().year+1)
+
+        data_raw_sort = data_raw_sort.set_index(['Posted Date'])
+        dates = pd.date_range(start=startDate,end=endDate, freq='AS')
+        self.results = {}
+        for i, date in enumerate(dates[:-1]):
+            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Institution')).count()['Institution']
 
 
     def create_us_map(self,data,usersCol='users',mapType='Accent',textSize=8):
