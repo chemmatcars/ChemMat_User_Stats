@@ -130,8 +130,8 @@ class ChemMatUserStats(QMainWindow):
             self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.rawData.shape)
             self.calComboBox.clear()
             self.calComboBox.addItems(list(self.rawData.columns.values))
-            self.calComboBox.addItem('Unique Users')
-            self.calComboBox.addItem('Unique Institutions')
+            self.calComboBox.addItem('Yearly Unique Users')
+            self.calComboBox.addItem('Yearly Unique Institutions')
             self.calComboBox.addItem('US User Map')
             self.calComboBox.addItem('World User Map')
             self.enableButtons(enable=True)
@@ -255,10 +255,10 @@ class ChemMatUserStats(QMainWindow):
             self.results=self.worldData['Country'].value_counts().to_dict()
             self.resultsNorm=self.worldData['Country'].value_counts(normalize=True).to_dict()
             self.showStat()
-        elif self.calComboBox.currentText()=="Unique Users":
+        elif self.calComboBox.currentText()==" Yearly Unique Users":
             self.calcUniqueUsers()
             self.showStat()
-        elif self.calComboBox.currentText()=="Unique Institutions":
+        elif self.calComboBox.currentText()=="Yearly Unique Institutions":
             self.calcUniqueInstitutions()
             self.showStat()
         else:
@@ -271,7 +271,6 @@ class ChemMatUserStats(QMainWindow):
     def showStat(self):
         #self.resultTextEdit.clear()
         self.resultTextBrowser.clear()
-        print(self.results)
         maxlen=max([len(str(key)) for key in self.results.keys()])
         for key in self.results.keys():
             try:
