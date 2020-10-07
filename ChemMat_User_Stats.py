@@ -1,5 +1,5 @@
 from PyQt5.uic import loadUi 
-from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog, QInputDialog
+from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox, QMainWindow, QFileDialog, QDialog, QInputDialog, QProgressDialog, QInputDialog
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont,QCursor
 from PyQt5.QtTest import QTest
@@ -17,6 +17,7 @@ import shapely
 from matplotlib.colors import hsv_to_rgb
 from matplotlib import ticker
 import numpy as np
+import re
 
 
 class PlotDialog(QDialog):
@@ -57,9 +58,9 @@ class ChemMatUserStats(QMainWindow):
 
         self.initSignals()
         self.filterDict={}
-        self.filterRangeItems=['Posted Date','Badge No','Experiment Id']
+        self.filterRangeItems=['Posted Date','Badge','Experiment Id']
         self.userInstitute = pd.read_excel('./Data/institution_data.xlsx')
-        self.countryState = self.userInstitute.set_index('Institution').to_dict()
+        self.countryState = self.userInstitute.set_index('Inst Name').to_dict()
         self.CountryNames=pd.read_excel('./Data/Countries.xlsx').set_index('DB_Name').to_dict()
         self.msiList=pd.read_excel('./Data/MSI-master-list.xls',skiprows=1)
 
@@ -110,18 +111,53 @@ class ChemMatUserStats(QMainWindow):
 
     def loadFile(self):
         self.filterListWidget.clear()
+        skiprows,done=QInputDialog.getInt(self,'Input Dialog','No. of rows to skip')
+        if not done:
+            return
         self.fileName=QFileDialog.getOpenFileName(self,"Select data file",filter="Data files (*.xlsx *.csv)")[0]
         if self.fileName!='':
             QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
             self.fileLabel.setText(self.fileName)
             extn=os.path.splitext(self.fileName)[1]
             if extn=='.xlsx':
-                self.rawData=pd.read_excel(self.fileName)
+                self.rawData=pd.read_excel(self.fileName,skiprows=skiprows)
             elif extn=='.csv':
-                self.rawData=pd.read_csv(self.fileName)
+                self.rawData=pd.read_csv(self.fileName,skiprows=skiprows)
             self.rawData.dropna(axis=1,how='all')
             self.rawData['Posted Date'] = pd.to_datetime(self.rawData['Posted Date'])
-            self.rawData['MSI']=np.where(self.rawData['Institution'].isin(self.msiList['Name']),'True','False')
+            self.rawData['MSI']=np.where(self.rawData['Inst Name'].isin(self.msiList['Name']),'True','False')
+            Nrows,NCols=self.rawData.shape
+            progress_dlg=QProgressDialog("Reading file","Stop",0,Nrows,self)
+            progress_dlg.setWindowTitle('Loading file')
+            progress_dlg.setMinimumDuration(0)
+            progress_dlg.setWindowModality(Qt.WindowModal)
+            progress_dlg.setValue(0)
+            progress_dlg.show()
+            for i in range(Nrows):
+                try:
+                    funding_sources=re.split(',\s*(?![^()]*\))',self.rawData['Funding Source'][i])
+                    research_sub = re.split(',\s*(?![^()]*\))', self.rawData['Research Subject'][i])
+                    if len(funding_sources)>1 or len(research_sub)>1:
+                        line=self.rawData.iloc[i]
+                        self.rawData.loc[i,'Funding Source']=funding_sources[0]
+                        self.rawData.loc[i,'Research Subject']=research_sub[0]
+                        for source in funding_sources:
+                            for sub in research_sub[1:]:
+                                line.loc['Funding Source']=source
+                                line.loc['Research Subject']=sub
+                                self.rawData=self.rawData.append(line,ignore_index=True)
+                        for source in funding_sources[1:]:
+                            line.loc['Funding Source'] = source
+                            line.loc['Research Subject'] = research_sub[0]
+                            self.rawData = self.rawData.append(line, ignore_index=True)
+                    progress_dlg.setValue(i)
+                    QApplication.processEvents()
+                    if progress_dlg.wasCanceled():
+                        break
+                except:
+                    QMessageBox.warning(self,'Line error','There is a problem at line %d'%i,QMessageBox.Ok)
+
+            Nrows, NCols = self.rawData.shape
             self.filterData=copy.copy(self.rawData)
             self.filteredDataTableWidget.setData(self.rawData.transpose().to_dict())
             self.filterComboBox.clear()
@@ -137,6 +173,7 @@ class ChemMatUserStats(QMainWindow):
             self.enableButtons(enable=True)
             self.exportStatPushButton.setEnabled(False)
             self.plotStatPushButton.setEnabled(False)
+            progress_dlg.close()
             QApplication.restoreOverrideCursor()
 
 
@@ -178,7 +215,9 @@ class ChemMatUserStats(QMainWindow):
             pass
 
     def addFilterList(self,selectedItems=None):
-        dialog = FilterListDialog(parent=self,items=list(self.rawData[self.filterText].unique()),selectedItems=selectedItems)
+        items=list(self.rawData[self.filterText].unique())
+        items=[str(item) for item in items]
+        dialog = FilterListDialog(parent=self,items=items,selectedItems=selectedItems)
         if dialog.exec_():
             self.filterList=[item.text() for item in dialog.itemListWidget.selectedItems()]
             #print(self.filterList)
@@ -197,10 +236,11 @@ class ChemMatUserStats(QMainWindow):
             filterVal=eval(filterVal)
            # print(filterVal)
             if filterKey=='Remove Duplicates':
+                print(self.duplicateList)
                 self.filterData=self.filterData.drop_duplicates(self.duplicateList)
             elif filterKey=='Remove BL Scientists':
-                blBadgeList=self.blSciData['Badge No'].tolist()
-                self.filterData=self.filterData[~((self.filterData['Badge No'].isin(blBadgeList)) & (self.filterData['Institution']=='The University of Chicago'))]
+                blBadgeList=self.blSciData['Badge'].tolist()
+                self.filterData=self.filterData[~((self.filterData['Badge'].isin(blBadgeList)) & (self.filterData['Inst Name']=='The University of Chicago'))]
             elif filterKey in self.filterRangeItems:
                 self.filterData=self.filterData[(self.filterData[filterKey] >= filterVal[0]) & (self.filterData[filterKey] <= filterVal[1])]
                 #self.filteredDataTableWidget.clear()
@@ -238,24 +278,24 @@ class ChemMatUserStats(QMainWindow):
 
     def calStat(self):
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-        if self.calComboBox.currentText()=='Yearly Unique Users':
+        if self.calComboBox.currentText()=='Unique Users':
             pass
         elif self.calComboBox.currentText()=='US User Map':
-            self.stateData = self.filterData.drop_duplicates(('Badge No', 'Institution'))[['Institution']]
-            self.stateData['Country'] = self.stateData['Institution'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
+            self.stateData = self.filterData.drop_duplicates(('Badge', 'Inst Name'))[['Inst Name']]
+            self.stateData['Country'] = self.stateData['Inst Name'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
             stateData=self.stateData[self.stateData['Country']=='USA']
-            y=stateData['Institution']
+            y=stateData['Inst Name']
             stateData['State']=y.apply(lambda x: self.countryState['State'][x] if x in self.countryState['State'] else self.updateCSD(x))
             self.results = stateData['State'].value_counts().to_dict()
             self.resultsNorm = stateData['State'].value_counts(normalize=True).to_dict()
             self.showStat()
         elif self.calComboBox.currentText()=='World User Map':
-            self.worldData = self.filterData.drop_duplicates(('Badge No', 'Institution'))[['Institution']]
-            self.worldData['Country'] = self.worldData['Institution'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
+            self.worldData = self.filterData.drop_duplicates(('Badge', 'Inst Name'))[['Inst Name']]
+            self.worldData['Country'] = self.worldData['Inst Name'].apply(lambda x: self.countryState['Country'][x] if x in self.countryState['Country'] else self.updateCSD(x))
             self.results=self.worldData['Country'].value_counts().to_dict()
             self.resultsNorm=self.worldData['Country'].value_counts(normalize=True).to_dict()
             self.showStat()
-        elif self.calComboBox.currentText()==" Yearly Unique Users":
+        elif self.calComboBox.currentText()=="Yearly Unique Users":
             self.calcUniqueUsers()
             self.showStat()
         elif self.calComboBox.currentText()=="Yearly Unique Institutions":
@@ -327,7 +367,7 @@ class ChemMatUserStats(QMainWindow):
             self.countryState['State'][institute] = y
         else:
             y=''
-        df=pd.DataFrame([[institute, x, y]], columns=['Institution', 'Country', 'State' ])
+        df=pd.DataFrame([[institute, x, y]], columns=['Inst Name', 'Country', 'State' ])
         self.userInstitute=self.userInstitute.append(df, ignore_index=True)
         self.userInstitute.to_excel('./Data/institution_data.xlsx',index=False)
         return x
@@ -392,7 +432,7 @@ class ChemMatUserStats(QMainWindow):
         dates = pd.date_range(start=startDate,end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
-            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge No','Institution')).count()['Badge No']
+            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge','Inst Name')).count()['Badge']
 
     def calcUniqueInstitutions(self):
         """
@@ -408,7 +448,7 @@ class ChemMatUserStats(QMainWindow):
         dates = pd.date_range(start=startDate,end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
-            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Institution')).count()['Institution']
+            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Inst Name')).count()['Inst Name']
 
 
     def create_us_map(self,data,usersCol='users',mapType='Accent',textSize=8):
