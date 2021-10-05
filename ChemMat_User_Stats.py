@@ -167,7 +167,9 @@ class ChemMatUserStats(QMainWindow):
             self.calComboBox.clear()
             self.calComboBox.addItems(list(self.rawData.columns.values))
             self.calComboBox.addItem('Yearly Unique Users')
+            self.calComboBox.addItem('Yearly Unique Users (Fiscal)')
             self.calComboBox.addItem('Yearly Unique Institutions')
+            self.calComboBox.addItem('Yearly Unique Institutions (Fiscal)')
             self.calComboBox.addItem('US User Map')
             self.calComboBox.addItem('World User Map')
             self.enableButtons(enable=True)
@@ -296,10 +298,16 @@ class ChemMatUserStats(QMainWindow):
             self.resultsNorm=self.worldData['Country'].value_counts(normalize=True).to_dict()
             self.showStat()
         elif self.calComboBox.currentText()=="Yearly Unique Users":
-            self.calcUniqueUsers()
+            self.calcUniqueUsers(type=None)
+            self.showStat()
+        elif self.calComboBox.currentText()=='Yearly Unique Users (Fiscal)':
+            self.calcUniqueUsers(type='Fiscal')
             self.showStat()
         elif self.calComboBox.currentText()=="Yearly Unique Institutions":
             self.calcUniqueInstitutions()
+            self.showStat()
+        elif self.calComboBox.currentText()=='Yearly Unique Institutions (Fiscal)':
+            self.calcUniqueInstitutions(type='Fiscal')
             self.showStat()
         else:
             self.results=self.filterData[self.calComboBox.currentText()].value_counts().to_dict()
@@ -418,7 +426,7 @@ class ChemMatUserStats(QMainWindow):
             item.setText(self.filterText + '::' + str(self.filterDict[self.filterText]))
         self.processFilter()
 
-    def calcUniqueUsers(self):
+    def calcUniqueUsers(self,type=None):
         """
         Calculate the frenquency of Unique Users per year
         :return:
@@ -429,12 +437,17 @@ class ChemMatUserStats(QMainWindow):
         endDate='1/1/'+str(max(data_raw_sort['Posted Date']).date().year+1)
 
         data_raw_sort = data_raw_sort.set_index(['Posted Date'])
-        dates = pd.date_range(start=startDate,end=endDate, freq='AS')
+        if type == 'Fiscal':
+            dates = pd.date_range(start=startDate, end=endDate, freq='AS-OCT')
+        else:
+            dates = pd.date_range(start=startDate, end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
             self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge','Inst Name')).count()['Badge']
 
-    def calcUniqueInstitutions(self):
+
+
+    def calcUniqueInstitutions(self,type=None):
         """
         Calculate the frenquency of Unique Insitutions per year
         :return:
@@ -445,7 +458,10 @@ class ChemMatUserStats(QMainWindow):
         endDate='1/1/'+str(max(data_raw_sort['Posted Date']).date().year+1)
 
         data_raw_sort = data_raw_sort.set_index(['Posted Date'])
-        dates = pd.date_range(start=startDate,end=endDate, freq='AS')
+        if type=='Fiscal':
+            dates = pd.date_range(start=startDate,end=endDate, freq='AS-OCT')
+        else:
+            dates = pd.date_range(start=startDate,end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
             self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Inst Name')).count()['Inst Name']
