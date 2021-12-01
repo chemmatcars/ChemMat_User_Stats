@@ -240,7 +240,10 @@ class ChemMatUserStats(QMainWindow):
                 blBadgeList=self.blSciData['Badge'].tolist()
                 self.filterData=self.filterData[~((self.filterData['Badge'].isin(blBadgeList)) & (self.filterData['Inst Name']=='The University of Chicago'))]
             elif filterKey in self.filterRangeItems:
-                self.filterData=self.filterData[(self.filterData[filterKey] >= filterVal[0]) & (self.filterData[filterKey] <= filterVal[1])]
+                if len(filterVal)==2:
+                    self.filterData=self.filterData[(self.filterData[filterKey] >= filterVal[0]) & (self.filterData[filterKey] <= filterVal[1])]
+                else:
+                    self.filterData = self.filterData[self.filterData[filterKey].isin(filterVal)]
                 #self.filteredDataTableWidget.clear()
             else:
                 self.filterData = self.filterData[self.filterData[filterKey].isin(filterVal)]
