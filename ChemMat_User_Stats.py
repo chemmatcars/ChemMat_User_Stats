@@ -222,7 +222,6 @@ class ChemMatUserStats(QMainWindow):
         dialog = FilterListDialog(parent=self,items=items,selectedItems=selectedItems)
         if dialog.exec_():
             self.filterList=[item.text() for item in dialog.itemListWidget.selectedItems()]
-            #print(self.filterList)
             self.filterDict[self.filterText]=self.filterList
             if selectedItems is None:
                 self.filterListWidget.addItem(self.filterText + '::' + str(self.filterDict[self.filterText]))
@@ -234,11 +233,8 @@ class ChemMatUserStats(QMainWindow):
         self.readBLScientist()
         for i in range(self.filterListWidget.count()):
             filterKey,filterVal=str(self.filterListWidget.item(i).text()).split('::')
-           # print(filterKey,filterVal)
             filterVal=eval(filterVal)
-           # print(filterVal)
             if filterKey=='Remove Duplicates':
-                print(self.duplicateList)
                 self.filterData=self.filterData.drop_duplicates(self.duplicateList)
             elif filterKey=='Remove BL Scientists':
                 blBadgeList=self.blSciData['Badge'].tolist()
@@ -246,7 +242,6 @@ class ChemMatUserStats(QMainWindow):
             elif filterKey in self.filterRangeItems:
                 self.filterData=self.filterData[(self.filterData[filterKey] >= filterVal[0]) & (self.filterData[filterKey] <= filterVal[1])]
                 #self.filteredDataTableWidget.clear()
-                #print(self.filterData.rows.count())
             else:
                 self.filterData = self.filterData[self.filterData[filterKey].isin(filterVal)]
         self.rowColumnLabel.setText('Rows:%d; Columns:%d' % self.filterData.shape)
@@ -257,7 +252,6 @@ class ChemMatUserStats(QMainWindow):
     def removeFilterItem(self):
         if self.filterListWidget.count()!=0:
             selectedRows=[self.filterListWidget.row(item) for item in self.filterListWidget.selectedItems()]
-            #print(sorted(selectedRows, reverse=True))
             selectedRows=sorted(selectedRows, reverse=True)
             for row in selectedRows:
                 self.filterListWidget.takeItem(row)
@@ -268,7 +262,6 @@ class ChemMatUserStats(QMainWindow):
         dialog.label.setText('Select the category for removing duplicates:')
         if dialog.exec_():
             self.duplicateList = [item.text() for item in dialog.itemListWidget.selectedItems()]
-           # print(self.duplicateList)
             if selectedItems is None:
                 self.filterListWidget.addItem('Remove Duplicates' + '::' + str(self.duplicateList))
                 self.processFilter()
@@ -443,7 +436,10 @@ class ChemMatUserStats(QMainWindow):
             dates = pd.date_range(start=startDate, end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
-            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge','Inst Name')).count()['Badge']
+            if type=='Fiscal':
+                self.results[str(dates[i+1].year)] = data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge', 'Inst Name')).count()['Badge']
+            else:
+                self.results[str(date.year)] = data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Badge','Inst Name')).count()['Badge']
 
 
 
@@ -464,7 +460,10 @@ class ChemMatUserStats(QMainWindow):
             dates = pd.date_range(start=startDate,end=endDate, freq='AS')
         self.results = {}
         for i, date in enumerate(dates[:-1]):
-            self.results[str(date.year)]=data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Inst Name')).count()['Inst Name']
+            if type=='Fiscal':
+                self.results[str(dates[i+1].year)] = data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Inst Name')).count()['Inst Name']
+            else:
+                self.results[str(date.year)] = data_raw_sort.loc[date:dates[i + 1]].drop_duplicates(('Inst Name')).count()['Inst Name']
 
 
     def create_us_map(self,data,usersCol='users',mapType='Accent',textSize=8):
